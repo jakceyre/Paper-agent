@@ -129,9 +129,23 @@ async def _search_arxiv(
 
 
 def _arxiv_id_from_entry(entry_id: str) -> str:
-    """Extract short arXiv ID from the full entry_id URL."""
+    """Extract short arXiv ID from the full entry_id URL.
+
+    E.g. 'http://arxiv.org/abs/2406.18007v1' -> '2406.18007'
+         'http://arxiv.org/abs/hep-th/9901001v2' -> 'hep-th/9901001'
+    """
+    # entry_id: http://arxiv.org/abs/2406.18007v1
+    # or:        http://arxiv.org/abs/hep-th/9901001
     parts = entry_id.rstrip("/").split("/")
-    raw = parts[-1]
+    # Get everything after 'abs/' — may be one or two segments
+    # e.g. ['http:', '', 'arxiv.org', 'abs', '2406.18007v1'] -> ['2406.18007v1']
+    #      ['http:', '', 'arxiv.org', 'abs', 'hep-th', '9901001v2'] -> ['hep-th', '9901001v2']
+    abs_idx = parts.index("abs") if "abs" in parts else -1
+    if abs_idx >= 0 and abs_idx + 1 < len(parts):
+        raw = "/".join(parts[abs_idx + 1:])  # '2406.18007v1' or 'hep-th/9901001v2'
+    else:
+        raw = parts[-1]  # fallback
+    # Remove version suffix if present (e.g. v1, v2, ...)
     if "v" in raw:
         v_idx = raw.rindex("v")
         if v_idx > 0 and raw[v_idx + 1:].isdigit():
