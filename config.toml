@@ -1,0 +1,22 @@
+[llm]
+model = "claude-sonnet-4-20250514"
+max_tokens = 4096
+temperature = 0.3
+
+[search]
+arxiv_max_results = 50
+semantic_scholar_max_results = 50
+default_year_range = [2020, 2025]
+max_papers = 20
+citation_expansion_depth = 1
+
+[pdf]
+download_dir = "outputs/paper-agent/pdf_cache"
+download_timeout_sec = 30
+parse_max_pages = 30
+parse_chunk_size = 3000
+
+[output]
+base_dir = "outputs/paper-agent"
+include_trace = true
+include_evidence = true
