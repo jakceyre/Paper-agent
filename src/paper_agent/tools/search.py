@@ -223,8 +223,108 @@ async def expand_citations(
     *,
     state: AgentState | None = None,
 ) -> dict:
-    """Expand the citation graph for a given paper via Semantic Scholar."""
-    return {
-        "search_results": [],
-        "errors": [],
-    }
+    """Expand the citation graph for a given paper via Semantic Scholar.
+
+    Fetches papers that cite this paper (citations) and papers this
+    paper cites (references), then converts them to PaperMetadata.
+
+    Args:
+        paper_id: S2 paperId or arXiv ID to expand from.
+        depth: How many levels of expansion (capped at 1 for MVP).
+        state: Optional AgentState for config access.
+
+    Returns:
+        Partial state dict with new search_results and errors.
+    """
+    import asyncio
+
+    from semanticscholar import AsyncSemanticScholar
+
+    errors: list[str] = []
+    papers: list[PaperMetadata] = []
+
+    if depth < 1:
+        return {"search_results": [], "errors": []}
+
+    try:
+        sch = AsyncSemanticScholar()
+
+        async def _fetch_citations():
+            try:
+                return await sch.get_paper_citations(
+                    paper_id,
+                    limit=20,
+                    fields=["paperId", "title", "abstract", "authors", "year",
+                            "url", "venue", "citationCount", "openAccessPdf", "externalIds"],
+                )
+            except Exception:
+                return []
+
+        async def _fetch_references():
+            try:
+                return await sch.get_paper_references(
+                    paper_id,
+                    limit=20,
+                    fields=["paperId", "title", "abstract", "authors", "year",
+                            "url", "venue", "citationCount", "openAccessPdf", "externalIds"],
+                )
+            except Exception:
+                return []
+
+        citations, references = await asyncio.gather(
+            _fetch_citations(), _fetch_references(), return_exceptions=True
+        )
+
+        for item_list in [citations, references]:
+            if not isinstance(item_list, list):
+                continue
+            for item in item_list:
+                if item is None:
+                    continue
+                arxiv_id = None
+                if hasattr(item, "externalIds") and item.externalIds:
+                    arxiv_id = item.externalIds.get("ArXiv")
+                pid = arxiv_id or (item.paperId if hasattr(item, "paperId") else "")
+                if not pid:
+                    continue
+
+                papers.append(
+                    PaperMetadata(
+                        paper_id=pid,
+                        source="semantic_scholar",
+                        title=getattr(item, "title", "") or "",
+                        authors=_parse_s2_authors(item),
+                        year=getattr(item, "year", None),
+                        abstract=getattr(item, "abstract", "") or "",
+                        url=getattr(item, "url", "")
+                        or f"https://www.semanticscholar.org/paper/{pid}",
+                        pdf_url=_get_s2_pdf(item),
+                        citation_count=getattr(item, "citationCount", None),
+                        venue=getattr(item, "venue", None) or None,
+                    )
+                )
+    except Exception as e:
+        errors.append(f"Citation expansion failed for {paper_id}: {e}")
+
+    return {"search_results": papers, "errors": errors}
+
+
+def _parse_s2_authors(item) -> list[str]:
+    """Extract author name strings from a Semantic Scholar item."""
+    if hasattr(item, "authors") and item.authors:
+        if isinstance(item.authors, list):
+            if all(isinstance(a, dict) for a in item.authors):
+                return [a.get("name", "") for a in item.authors]
+            if all(hasattr(a, "name") for a in item.authors):
+                return [a.name for a in item.authors]
+    return []
+
+
+def _get_s2_pdf(item) -> str | None:
+    """Extract open access PDF URL from a Semantic Scholar item."""
+    if hasattr(item, "openAccessPdf") and item.openAccessPdf:
+        if isinstance(item.openAccessPdf, dict):
+            return item.openAccessPdf.get("url")
+        if hasattr(item.openAccessPdf, "url"):
+            return item.openAccessPdf.url
+    return None
