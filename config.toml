@@ -1,7 +1,14 @@
+# LLM provider: "anthropic" or "deepseek"
 [llm]
+provider = "anthropic"
 model = "claude-sonnet-4-20250514"
 max_tokens = 4096
 temperature = 0.3
+
+# DeepSeek example (uncomment and set provider="deepseek"):
+# provider = "deepseek"
+# model = "deepseek-chat"
+# base_url = "https://api.deepseek.com/v1"
 
 [search]
 arxiv_max_results = 50

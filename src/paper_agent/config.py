@@ -17,12 +17,24 @@ except ImportError:
 
 @dataclass
 class LLMConfig:
-    """LLM provider configuration."""
+    """LLM provider configuration. Supports Anthropic and DeepSeek."""
+
+    provider: str = "anthropic"
+    """'anthropic' or 'deepseek'."""
 
     model: str = "claude-sonnet-4-20250514"
+    """Model name. DeepSeek example: 'deepseek-chat'."""
+
     max_tokens: int = 4096
     temperature: float = 0.3
-    api_key: str = field(default_factory=lambda: os.getenv("ANTHROPIC_API_KEY", ""))
+    base_url: str = ""
+    """Override API base URL. DeepSeek default: https://api.deepseek.com/v1."""
+
+    api_key: str = field(
+        default_factory=lambda: os.getenv("ANTHROPIC_API_KEY", "")
+        or os.getenv("OPENAI_API_KEY", "")  # DeepSeek uses OPENAI_API_KEY too
+        or os.getenv("DEEPSEEK_API_KEY", "")
+    )
 
 
 @dataclass
@@ -92,6 +104,10 @@ def load_config(config_path: str | Path = "config.toml") -> Config:
     # Env var overrides (highest priority)
     if api_key := os.getenv("ANTHROPIC_API_KEY"):
         cfg.llm.api_key = api_key
+    elif api_key := os.getenv("DEEPSEEK_API_KEY"):
+        cfg.llm.api_key = api_key
+    elif api_key := os.getenv("OPENAI_API_KEY"):
+        cfg.llm.api_key = api_key
 
     return cfg
 
@@ -102,7 +118,8 @@ def _apply_section(raw: dict, section: str, target: object) -> None:
         return
     for k, v in raw[section].items():
         if hasattr(target, k):
-            # Convert list to tuple for year_range
             if k == "default_year_range" and isinstance(v, list):
                 v = tuple(v)
+            if k == "base_url":
+                v = str(v)
             setattr(target, k, v)
